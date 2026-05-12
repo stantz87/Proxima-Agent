@@ -41,6 +41,35 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ── DATABASE ──────────────────────────────────────────────────────────────────
 
+
+def send_notification(deal_address, name, email, phone, notes):
+    try:
+        payload = json.dumps({
+            "from": "Proxima Portal <onboarding@resend.dev>",
+            "to": [NOTIFY_EMAIL],
+            "subject": f"New Reservation: {deal_address}",
+            "html": f"""
+            <h2>New Reservation — Proxima Capital</h2>
+            <p><strong>Property:</strong> {deal_address}</p>
+            <p><strong>Investor:</strong> {name}</p>
+            <p><strong>Email:</strong> {email}</p>
+            <p><strong>Phone:</strong> {phone or 'Not provided'}</p>
+            <p><strong>Notes:</strong> {notes or 'None'}</p>
+            <p><a href="https://proxima-portal.onrender.com/admin">View Admin Panel</a></p>
+            """
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            }
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as e:
+        print(f"Email notification failed: {e}")
+
 def init_db():
     con = sqlite3.connect(DB_PATH)
     con.executescript("""

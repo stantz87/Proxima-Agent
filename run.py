@@ -39,9 +39,6 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-with app.app_context():
-    init_db()
-
 # ── DATABASE ──────────────────────────────────────────────────────────────────
 
 def init_db():
@@ -141,6 +138,8 @@ def admin_required(f):
     return wrap
 
 # ── SERVE UPLOADS ─────────────────────────────────────────────────────────────
+
+init_db()
 
 @app.route("/uploads/<path:fn>")
 def serve_upload(fn):

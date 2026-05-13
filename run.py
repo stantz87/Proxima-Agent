@@ -747,12 +747,7 @@ body{background:#f3f4f4;font-family:Inter,sans-serif;color:#222}
   <div><div class="logo">Proxima <span>Capital</span></div><div class="hdr-sub">Deal Portal</div></div>
   <div class="pill-hdr">&#10003; Authorised Agent</div>
 </div>
-<div class="stats">
-  <div class="stat"><div class="sl">Live Deals</div><div class="sv">{{ deals|length }}</div><div class="ss">Hartlepool charity</div></div>
-  <div class="stat"><div class="sl">Available</div><div class="sv g">{{ deals|selectattr('d.status','eq','available')|list|length }}</div><div class="ss">Ready to reserve</div></div>
-  <div class="stat"><div class="sl">Net Yield</div><div class="sv g">10.0%</div><div class="ss">Both units</div></div>
-  <div class="stat"><div class="sl">Lease</div><div class="sv" style="font-size:14px;padding-top:4px">10yr FRI</div><div class="ss">No break clause</div></div>
-</div>
+
 <div class="body">
 <div class="sec">Live Deals</div>
 {% for item in deals %}{% set d=item.d %}{% set photos=item.photos %}{% set updates=item.updates %}
@@ -789,6 +784,9 @@ body{background:#f3f4f4;font-family:Inter,sans-serif;color:#222}
         onclick="openModal('{{ d.id }}','{{ d.address }}','{{ d.price }} · {{ d.net_yield }} · {{ d.annual_rent }}')">
         &#128274; Reserve This Unit
       </button>
+      {% if d.pdf_filename %}
+      <a href="/uploads/{{ d.pdf_filename }}" target="_blank" class="btn-pdf">&#128196; Download Fact Sheet</a>
+      {% endif %}
     </div>
     {% if updates %}
     <div class="upds"><div class="ut">Progress Updates</div>

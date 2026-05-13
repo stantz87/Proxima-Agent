@@ -22,7 +22,7 @@ os.makedirs(UPLOAD_FOLDER,exist_ok=True)
 def send_notification(address,name,email,phone,message):
     try:
         msg=MIMEMultipart()
-        msg["From"]=GMAIL_USER
+        msg["From"]="Proxima Capital <" + GMAIL_USER + ">"
         msg["To"]=NOTIFY_EMAIL
         msg["Subject"]=f"New Enquiry: {address}"
         body=f"<h2>New Enquiry - Proxima Capital</h2><p><b>Property:</b> {address}</p><p><b>Name:</b> {name}</p><p><b>Email:</b> {email}</p><p><b>Phone:</b> {phone or 'Not provided'}</p><p><b>Message:</b> {message or 'None'}</p>"

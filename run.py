@@ -208,6 +208,23 @@ def reserve():
 
 # ── ADMIN LOGIN ───────────────────────────────────────────────────────────────
 
+
+@app.route("/portal/enquire", methods=["POST"])
+def enquire():
+    data = request.json or {}
+    deal_id = data.get("deal_id")
+    name = data.get("name","").strip()
+    email = data.get("email","").strip()
+    if not name or not email:
+        return jsonify({"ok": False, "error": "Name and email required"})
+    # Get deal address
+    con = db()
+    deal = con.execute("SELECT address FROM deals WHERE id=?", (deal_id,)).fetchone()
+    con.close()
+    addr = deal["address"] if deal else "Unknown property"
+    send_notification(addr, name, email, data.get("phone",""), data.get("notes",""))
+    return jsonify({"ok": True})
+
 @app.route("/admin/login", methods=["GET","POST"])
 def admin_login():
     error = None
@@ -554,7 +571,180 @@ body{background:#f3f4f4;font-family:Inter,sans-serif;color:#222}
 .toast.show{opacity:1;transform:translateY(0)}
 </style></head><body>
 <div class="hdr">
-  <div><div class="logo">Proxima <span>Capital</span></div><div class="hdr-sub">Charity Deal Portal — Agent Access</div></div>
+  <div><div class="logo">Proxima <span>Capital</span></div><div class="hdr-sub">Deal Portal</div></div>
+  <div class="pill-hdr">&#10003; Authorised Agent</div>
+</div>
+
+<div class="body">
+{% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="msg err">{{ err }}</div>{% endif %}
+
+<div class="sec">Live Deals</div>
+{% for item in deals %}{% set d=item.d %}{% set photos=item.photos %}{% set updates=item.updates %}{% set reservs=item.reservations %}
+<div class="card">
+  <div class="card-head">
+    <div class="card-addr">{{ d.address }}</div>
+    <div style="display:flex;gap:10px;align-items:center">
+      {% if d.status=='available' %}<span class="s-avail">Available</span>
+      {% elif d.status=='reserved' %}<span class="s-res">Reserved</span>
+      {% else %}<span class="s-other">{{ d.status.title() }}</span>{% endif %}
+      <form method="POST" action="/admin/delete-deal" style="margin:0">
+        <input type="hidden" name="deal_id" value="{{ d.id }}">
+        <button class="btn-red" onclick="return confirm('Delete this deal?')">Delete</button>
+      </form>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="grid3">
+      <div class="item"><label>Price</label><div class="val">{{ d.price }}</div></div>
+      <div class="item"><label>Annual Rent</label><div class="val">{{ d.annual_rent }}</div></div>
+      <div class="item"><label>Net Yield</label><div class="val g">{{ d.net_yield }}</div></div>
+      <div class="item"><label>Lease</label><div class="val">{{ d.lease_term }}</div></div>
+      <div class="item"><label>10yr Income</label><div class="val">{{ d.term_income }}</div></div>
+      <div class="item"><label>Break Clause</label><div class="val">{{ d.break_clause }}</div></div>
+    </div>
+
+    <div style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#9aabab;margin-bottom:8px">Photos ({{ photos|length }}/{{ max_photos }})</div>
+    <div class="photo-row">
+      {% for p in photos %}
+      <div style="position:relative">
+        <img src="/uploads/{{ p.filename }}" class="thumb">
+        <form method="POST" action="/admin/delete-photo" style="position:absolute;top:3px;right:3px;margin:0">
+          <input type="hidden" name="photo_id" value="{{ p.id }}">
+          <button style="background:#b93333;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:13px;cursor:pointer;line-height:1" title="Remove">&times;</button>
+        </form>
+      </div>
+      {% endfor %}
+      {% if photos|length < max_photos %}
+      <form method="POST" action="/admin/upload-photo" enctype="multipart/form-data">
+        <input type="hidden" name="deal_id" value="{{ d.id }}">
+        <label class="add-photo-box" for="file_{{ d.id }}">&#43;<br>Add Photo</label>
+        <input type="file" id="file_{{ d.id }}" name="photo" accept="image/*" style="display:none" onchange="this.form.submit()">
+      </form>
+      {% endif %}
+    </div>
+
+    {% if reservs %}
+    <div style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#9aabab;margin-bottom:8px">Reservations</div>
+    {% for r in reservs %}
+    <div class="res-item"><strong>{{ r.name }}</strong> &mdash; {{ r.email }}{% if r.phone %} &mdash; {{ r.phone }}{% endif %}{% if r.notes %}<br><span style="color:#888">{{ r.notes }}</span>{% endif %}<span style="float:right;font-size:10px;color:#9aabab">{{ r.created_at[:10] }}</span></div>
+    {% endfor %}
+    {% endif %}
+
+    <div style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#9aabab;margin-bottom:8px">Progress Updates</div>
+    {% for u in updates %}
+    <div class="upd-item"><span>{{ u.message }}</span><span class="upd-time">{{ u.created_at[:16].replace('T',' ') }}</span></div>
+    {% endfor %}
+    {% if not updates %}<div style="font-size:12px;color:#9aabab;margin-bottom:8px">No updates yet.</div>{% endif %}
+    <form method="POST" action="/admin/add-update">
+      <input type="hidden" name="deal_id" value="{{ d.id }}">
+      <div class="inline">
+        <input class="inp" type="text" name="message" placeholder="e.g. Solicitors instructed. Exchange week commencing 19 May." required>
+        <button class="btn" type="submit">Post</button>
+      </div>
+    </form>
+
+    <form method="POST" action="/admin/update-status" style="margin-top:14px;display:flex;gap:8px;align-items:center">
+      <input type="hidden" name="deal_id" value="{{ d.id }}">
+      <span style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#535353">Status:</span>
+      <select name="status" class="sel">
+        <option value="available" {% if d.status=='available' %}selected{% endif %}>Available</option>
+        <option value="reserved" {% if d.status=='reserved' %}selected{% endif %}>Reserved</option>
+        <option value="under-offer" {% if d.status=='under-offer' %}selected{% endif %}>Under Offer</option>
+        <option value="exchanged" {% if d.status=='exchanged' %}selected{% endif %}>Exchanged</option>
+        <option value="completed" {% if d.status=='completed' %}selected{% endif %}>Completed</option>
+      </select>
+      <button class="btn" type="submit">Update</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+<div class="sec">Add New Deal</div>
+<div class="form-box">
+  <form method="POST" action="/admin/add-deal">
+    <div class="form-grid">
+      <div><label>Street Address *</label><input type="text" name="address" placeholder="e.g. 14 Example Street, Hartlepool" required></div>
+      <div><label>Property Description</label><input type="text" name="description" placeholder="3 Bed Semi-Detached · Freehold · No Chain"></div>
+      <div><label>Sale Price</label><input type="text" name="price" placeholder="£114,000"></div>
+      <div><label>Annual Rent</label><input type="text" name="annual_rent" placeholder="£11,400 p.a."></div>
+      <div><label>Monthly Income</label><input type="text" name="monthly" placeholder="£950"></div>
+      <div><label>Net Yield</label><input type="text" name="net_yield" placeholder="10.0%"></div>
+      <div><label>Lease Term</label><input type="text" name="lease_term" placeholder="10yr FRI"></div>
+      <div><label>Break Clause</label><select name="break_clause"><option>None</option><option>6-Month Break</option><option>12-Month Break</option></select></div>
+      <div><label>Projected Term Income</label><input type="text" name="term_income" placeholder="£130,667"></div>
+      <div><label>Status</label><select name="status"><option value="available">Available</option><option value="reserved">Reserved</option></select></div>
+    </div>
+    <div style="margin-bottom:14px"><label style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#535353;display:block;margin-bottom:4px">Property Notes</label>
+      <textarea name="notes" placeholder="e.g. Pebble dash exterior. Quiet residential crescent. Off-road parking."></textarea>
+    </div>
+    <button class="btn" type="submit">Add Deal</button>
+  </form>
+</div>
+</div></body></html>"""
+
+PORTAL_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proxima Capital — Agent Portal</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f3f4f4;font-family:Inter,sans-serif;color:#222}
+.hdr{background:#085454;border-bottom:3px solid #01C977;padding:16px 28px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:19px;font-weight:800;color:#fff}.logo span{color:#01C977}
+.hdr-sub{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-top:2px}
+.pill-hdr{background:rgba(1,201,119,0.12);border:1px solid rgba(1,201,119,0.3);color:#01C977;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:5px 13px;border-radius:20px}
+.stats{background:#085454;padding:0 28px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.09);border-radius:9px;padding:13px 15px}
+.sl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:5px}
+.sv{font-size:21px;font-weight:800;color:#fff;font-family:monospace}.sv.g{color:#01C977}
+.ss{font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px}
+.body{padding:22px 28px}
+.sec{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#085454;margin-bottom:14px}
+.card{background:#fff;border-radius:12px;border:1px solid #dde2e2;overflow:hidden;margin-bottom:16px}
+.photos{display:grid;gap:2px}
+.photos img{width:100%;height:180px;object-fit:cover;display:block}
+.no-photo{height:140px;background:#e8f0f0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#9aabab}
+.card-body{padding:18px 20px}
+.addr{font-size:14px;font-weight:800;color:#085454;margin-bottom:2px}
+.desc{font-size:11px;color:#535353;margin-bottom:11px}
+.pills{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.p{font-size:9px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;padding:3px 8px;border-radius:4px}
+.ps{background:#e5efef;color:#085454}.pg{background:#e6fbf2;color:#059255}
+.pr{background:#fce8e8;color:#b93333}.pa{background:#fff3e0;color:#c07a00}
+.notes{font-size:12px;color:#535353;margin-bottom:12px;line-height:1.6}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.ml{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#9aabab;margin-bottom:2px}
+.mv{font-size:13px;font-weight:800;font-family:monospace;color:#222}.mv.g{color:#01a060}
+.bottom-row{display:flex;align-items:center;justify-content:space-between;padding-top:14px;border-top:1px solid #eff0f0;flex-wrap:wrap;gap:10px}
+.yld{background:#085454;color:#01C977;font-size:20px;font-weight:800;padding:10px 16px;border-radius:9px;font-family:monospace;text-align:center}
+.ys{font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.sc{font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:4px 11px;border-radius:20px}
+.sa{background:#e6fbf2;color:#059255;border:1px solid #b3f0d9}
+.sr{background:#fff3e0;color:#c07a00;border:1px solid #ffd888}
+.so{background:#fce8e8;color:#b93333;border:1px solid #f5b8b8}
+.sd{background:#eaecf4;color:#3a3d8f;border:1px solid #c0c4e8}
+.btn-res{background:#01C977;color:#024d30;font-size:11px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;padding:9px 18px;border-radius:7px;border:none;cursor:pointer}
+.btn-res:hover{opacity:0.85}.btn-res:disabled{opacity:0.35;cursor:not-allowed}
+.upds{margin-top:14px}
+.ut{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#9aabab;margin-bottom:8px}
+.ui{background:#f7f9f9;border-radius:7px;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#444;display:flex;justify-content:space-between;gap:12px}
+.ud{font-size:10px;color:#9aabab;white-space:nowrap}
+.foot{background:#f7f9f9;border-top:1px solid #eff0f0;padding:9px 20px;font-size:10px;color:#9aabab;display:flex;justify-content:space-between}
+.modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(8,84,84,0.5);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:13px;padding:26px;max-width:420px;width:100%;border-top:4px solid #01C977}
+.mt{font-size:15px;font-weight:800;color:#085454;margin-bottom:3px}
+.ms{font-size:11px;color:#535353;margin-bottom:16px}
+.ml2{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#535353;margin-bottom:4px;display:block;margin-top:10px}
+.mi{width:100%;padding:9px 11px;border:1px solid #cdd;border-radius:7px;font-size:13px;color:#222;outline:none}
+.mi:focus{border-color:#085454}
+.macts{display:flex;gap:9px;margin-top:18px}
+.msub{flex:1;background:#085454;color:#fff;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:10px;border-radius:7px;border:none;cursor:pointer}
+.mcan{background:#fff;color:#535353;font-size:11px;padding:10px 16px;border-radius:7px;border:1px solid #cdd;cursor:pointer}
+.toast{position:fixed;bottom:20px;right:20px;background:#085454;color:#fff;padding:11px 18px;border-radius:9px;font-size:12px;font-weight:700;border-left:4px solid #01C977;opacity:0;transform:translateY(8px);transition:all 0.3s;pointer-events:none;z-index:999}
+.toast.show{opacity:1;transform:translateY(0)}
+</style></head><body>
+<div class="hdr">
+  <div><div class="logo">Proxima <span>Capital</span></div><div class="hdr-sub">Deal Portal</div></div>
   <div class="pill-hdr">&#10003; Authorised Agent</div>
 </div>
 <div class="stats">
@@ -628,7 +818,7 @@ body{background:#f3f4f4;font-family:Inter,sans-serif;color:#222}
 <script>
 function openModal(id,addr,sub){
   document.getElementById('m-id').value=id;
-  document.getElementById('m-title').textContent='Reserve: '+addr;
+  document.getElementById('m-title').textContent='Enquire: '+addr;
   document.getElementById('m-sub').textContent=sub;
   ['m-name','m-email','m-phone','m-notes'].forEach(function(i){document.getElementById(i).value=''});
   document.getElementById('modal').classList.add('open');
@@ -638,11 +828,11 @@ function submitRes(){
   var name=document.getElementById('m-name').value.trim();
   var email=document.getElementById('m-email').value.trim();
   if(!name||!email){showToast('Name and email required.');return;}
-  fetch('/portal/reserve',{method:'POST',headers:{'Content-Type':'application/json'},
+  fetch('/portal/enquire',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({deal_id:document.getElementById('m-id').value,name:name,email:email,
       phone:document.getElementById('m-phone').value,notes:document.getElementById('m-notes').value})
   }).then(function(r){return r.json()}).then(function(d){
-    if(d.ok){closeModal();showToast('Reserved. Proxima Capital will be in touch shortly.');setTimeout(function(){location.reload()},2200);}
+    if(d.ok){closeModal();showToast('Enquiry sent. Proxima Capital will be in touch shortly.');setTimeout(function(){location.reload()},2200);}
     else{showToast('Error: '+d.error);}
   }).catch(function(){showToast('Network error. Please call us directly.');});
 }

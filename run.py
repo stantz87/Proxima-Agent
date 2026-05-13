@@ -1,10 +1,13 @@
-import os,sqlite3,uuid,urllib.request,json
+import os,sqlite3,uuid,smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from functools import wraps
 from flask import Flask,request,session,redirect,render_template_string,send_from_directory,jsonify
 
 ADMIN_PASSWORD="proxima2024"
-RESEND_API_KEY="re_6UotXaj1_6sseZWR37TW47EHwRXXrjJgg"
+GMAIL_USER="stantz87@gmail.com"
+GMAIL_APP_PASSWORD="arip mxpw myfr unad"
 NOTIFY_EMAIL="james@proxcap.co"
 DB_PATH="portal.db"
 UPLOAD_FOLDER="uploads"
@@ -18,14 +21,16 @@ os.makedirs(UPLOAD_FOLDER,exist_ok=True)
 
 def send_notification(address,name,email,phone,message):
     try:
-        payload=json.dumps({
-            "from":"Proxima Capital <onboarding@resend.dev>",
-            "to":[NOTIFY_EMAIL],
-            "subject":f"New Enquiry: {address}",
-            "html":f"<h2>New Enquiry — Proxima Capital</h2><p><b>Property:</b> {address}</p><p><b>Name:</b> {name}</p><p><b>Email:</b> {email}</p><p><b>Phone:</b> {phone or 'Not provided'}</p><p><b>Message:</b> {message or 'None'}</p><p><a href='https://proxima-portal.onrender.com/admin'>View Admin Panel</a></p>"
-        }).encode()
-        req=urllib.request.Request("https://api.resend.com/emails",data=payload,headers={"Authorization":f"Bearer {RESEND_API_KEY}","Content-Type":"application/json"})
-        urllib.request.urlopen(req,timeout=5)
+        msg=MIMEMultipart()
+        msg["From"]=GMAIL_USER
+        msg["To"]=NOTIFY_EMAIL
+        msg["Subject"]=f"New Enquiry: {address}"
+        body=f"<h2>New Enquiry - Proxima Capital</h2><p><b>Property:</b> {address}</p><p><b>Name:</b> {name}</p><p><b>Email:</b> {email}</p><p><b>Phone:</b> {phone or 'Not provided'}</p><p><b>Message:</b> {message or 'None'}</p>"
+        msg.attach(MIMEText(body,"html"))
+        with smtplib.SMTP_SSL("smtp.gmail.com",465) as s:
+            s.login(GMAIL_USER,GMAIL_APP_PASSWORD)
+            s.sendmail(GMAIL_USER,NOTIFY_EMAIL,msg.as_string())
+        print("Email sent ok")
     except Exception as e:
         print(f"Email failed: {e}")
 
